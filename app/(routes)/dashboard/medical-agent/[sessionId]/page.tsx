@@ -1,14 +1,15 @@
 "use client";
 import axios from "axios";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import { doctorAgent } from "../../_components/DoctorAgentCard";
-import { CircleIcon, PhoneCall, PhoneOff } from "lucide-react";
+import { CircleIcon, Loader2, PhoneCall, PhoneOff } from "lucide-react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import Vapi from "@vapi-ai/web";
+import { toast } from "sonner";
 
-type SessionDetails = {
+export type SessionDetails = {
   id: number;
   notes: string;
   sessionId: string;
@@ -30,6 +31,11 @@ function MedicalVoiceAgent() {
   const [currentRole, setCurrentRole] = useState<string | null>();
   const [liveTranscription, setLiveTranscription] = useState<string>();
   const [messages, setMessages] = useState<message[]>([]);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  // listeners cache
+  const [listeners, setListeners] = useState<any>({});
 
   useEffect(() => {
     sessionId && GetSessionDetails();
@@ -37,34 +43,29 @@ function MedicalVoiceAgent() {
 
   const GetSessionDetails = async () => {
     const result = await axios.get("/api/session-chat?sessionId=" + sessionId);
-    console.log("Session Details: ", result.data);
-    setSessionDetails(result.data);
+    setSessionDetails(result.data[0]);
   };
 
   const startCall = async () => {
     const vapi = new Vapi(process.env.NEXT_PUBLIC_VAPI_API_KEY!);
+    setVapiInstance(vapi);
 
-    // Start voice conversation
-    vapi.start(process.env.NEXT_PUBLIC_VAPI_VOICE_ASSISTANT_ID!);
-
-    // Listen for events
-    vapi.on("call-start", () => {
-      console.log("Call started");
+    const onCallStart = () => {
       setCallStarted(true);
-    });
-    vapi.on("call-end", () => {
-      console.log("Call ended");
+    };
+
+    const onCallEnd = () => {
       setCallStarted(false);
-    });
-    vapi.on("message", (message) => {
+      setLoading(false);
+    };
+
+    const onMessage = (message: any) => {
       if (message.type === "transcript") {
         const { role, transcriptType, transcript } = message;
-        console.log(`${message.role}: ${message.transcript}`);
         if (transcriptType === "partial") {
           setLiveTranscription(transcript);
           setCurrentRole(role);
         } else if (transcriptType === "final") {
-          // Final transcript received
           setMessages((prev: any) => [
             ...(prev || []),
             { role: role, text: transcript },
@@ -73,28 +74,111 @@ function MedicalVoiceAgent() {
           setCurrentRole(null);
         }
       }
+    };
+
+    const onSpeechStart = () => {
+      setCurrentRole("assistant");
+    };
+
+    const onSpeechEnd = () => {
+      setCurrentRole("user");
+    };
+
+    // Register all listeners
+    vapi.on("call-start", onCallStart);
+    vapi.on("call-end", onCallEnd);
+    vapi.on("message", onMessage);
+    vapi.on("speech-start", onSpeechStart);
+    vapi.on("speech-end", onSpeechEnd);
+
+    setListeners({
+      onCallStart,
+      onCallEnd,
+      onMessage,
+      onSpeechStart,
+      onSpeechEnd,
     });
 
-    vapiInstance.on("speech-start", () => {
-      console.log("Assistant started speaking");
-      setCurrentRole("assistant");
-    });
-    vapiInstance.on("speech-end", () => {
-      console.log("Assistant stopped speaking");
-      setCurrentRole("user");
-    });
+    const VapiAgentConfig = {
+      name: "Ai Medical Voice Agent",
+      firstMessage:
+        "You are a friendly General Physician AI. Greet the user and quickly ask what symptoms they are experiencing. Gently guide them through their symptoms and offer helpful suggestions or next steps in a calm and caring tone.",
+      transcriber: {
+        provider: "assembly-ai",
+        language: "en",
+      },
+      voice: {
+        provider: "playht",
+        voiceId: sessionDetails?.selectedDoctor.voiceId,
+      },
+      model: {
+        provider: "openai",
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content: sessionDetails?.selectedDoctor.agentPrompt,
+          },
+        ],
+      },
+    };
+
+    // Start the voice agent
+    //@ts-ignore
+    vapi.start(VapiAgentConfig);
   };
 
-  const endCall = () => {
-    if (!vapiInstance) return;
+  const endCall = async () => {
+    setLoading(true);
 
-    // Stop voice conversation listener
-    vapiInstance.stop();
-    vapiInstance.off("call-start");
-    vapiInstance.off("call-end");
-    vapiInstance.off("message");
-    setCallStarted(false);
-    setVapiInstance(null);
+    if (!vapiInstance) {
+      toast.error("No active call to disconnect");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      vapiInstance.stop();
+
+      // Properly remove all listeners
+      vapiInstance.off("call-start", listeners.onCallStart);
+      vapiInstance.off("call-end", listeners.onCallEnd);
+      vapiInstance.off("message", listeners.onMessage);
+      vapiInstance.off("speech-start", listeners.onSpeechStart);
+      vapiInstance.off("speech-end", listeners.onSpeechEnd);
+
+      setCallStarted(false);
+      setVapiInstance(null);
+      setListeners({}); // clear them
+
+      const reportResult = await GenerateReport();
+      toast.success("Your report generated successfully");
+      router.replace("/dashboard");
+    } catch (err) {
+      console.error("Error generating report:", err);
+      toast.error("Failed to generate report");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const GenerateReport = async () => {
+    if (!sessionDetails || !messages.length) {
+      toast.error("Incomplete data for generating report");
+      return;
+    }
+
+    try {
+      const result = await axios.post("/api/medical-report", {
+        messages: messages,
+        sessionDetails: sessionDetails,
+        sessionId: sessionId,
+      });
+      return result.data;
+    } catch (err) {
+      console.error("Report generation failed:", err);
+      toast.error("Report generation failed");
+    }
   };
 
   return (
@@ -113,38 +197,24 @@ function MedicalVoiceAgent() {
       {sessionDetails && (
         <div className="flex flex-col items-center mt-4">
           <Image
-            src={sessionDetails?.selectedDoctor.image}
+            src={sessionDetails?.selectedDoctor?.image}
             alt="Doctor"
             width={120}
             height={120}
             className="w-[100px] h-[100px] rounded-full object-cover"
           />
           <h2 className="font-bold text-lg mt-2">
-            {sessionDetails?.selectedDoctor.specialist}
+            {sessionDetails?.selectedDoctor?.specialist}
           </h2>
           <p className="text-sm text-gray-500">Ai Medical Voice Agent</p>
-          <div className="mt-12 overflow-y-auto flex flex-col items-center  px-10 md:px-20 lg:px-52 xl:px-72">
+          <div className="mt-12 overflow-y-auto flex flex-col items-center px-10 md:px-20 lg:px-52 xl:px-72">
             {messages?.slice(-4).map((msg, index) => (
-              // <div
-              //   key={index}
-              //   className={`flex items-center gap-2 ${
-              //     msg.role === "user" ? "justify-end" : "justify-start"
-              //   }`}
-              // >
-              //   <div
-              //     className={`p-2 rounded-lg ${
-              //       msg.role === "user"
-              //         ? "bg-blue-500 text-white"
-              //         : "bg-gray-200 text-black"
-              //     }`}
-              //   >
-              //     <p className="text-sm">{msg.text}</p>
-              //   </div>
-              // </div>
-              <h2 className="text-gray-400" key={index}>{msg.role} : {msg.text}</h2>
+              <h2 className="text-gray-400" key={`${msg.role}-${index}`}>
+                {msg.role} : {msg.text}
+              </h2>
             ))}
-            <h2 className="text-gray-400">Assistent Msg</h2>
-            {liveTranscription && liveTranscription?.length > 0 && (
+            <h2 className="text-gray-400">Assistant Msg</h2>
+            {liveTranscription && (
               <h2 className="text-lg">
                 {currentRole} : {liveTranscription}
               </h2>
@@ -155,18 +225,24 @@ function MedicalVoiceAgent() {
             <Button
               className="mt-4 cursor-pointer"
               onClick={() => startCall()}
-              disabled={callStarted}
+              disabled={callStarted || loading}
             >
-              Start Call <PhoneCall />
+              {loading ? "Loading..." : "Start Call"} <PhoneCall />
             </Button>
           ) : (
             <Button
-              className="mt-4 cursor-pointer"
+              className="mt-4 cursor-pointer flex items-center gap-2"
               variant={"destructive"}
               onClick={() => endCall()}
+              disabled={loading}
             >
-              {" "}
-              <PhoneOff /> Disconect
+              {loading ? (
+                <Loader2 className="animate-spin w-5 h-5" />
+              ) : (
+                <>
+                  <PhoneOff /> Disconnect
+                </>
+              )}
             </Button>
           )}
         </div>

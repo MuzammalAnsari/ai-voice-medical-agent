@@ -10,6 +10,7 @@ import {
   UserButton,
 } from "@clerk/nextjs";
 import Provider from "./provider";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,7 +38,10 @@ export default function RootLayout({
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
-          <Provider>{children}</Provider>
+          <Provider>
+            {children}
+            <Toaster />
+            </Provider>
         </body>
       </html>
     </ClerkProvider>
