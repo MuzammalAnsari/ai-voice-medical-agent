@@ -9,7 +9,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SessionDetails } from "../medical-agent/[sessionId]/page";
-import { Button } from "@/components/ui/button";
 import ViewReportDialog from "./ViewReportDialog";
 
 type Props = {

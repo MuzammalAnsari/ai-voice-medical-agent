@@ -5,9 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 
 const menuOptions = [
-  { id: 1, label: "Home", path: "/home" },
-  { id: 2, label: "History", path: "/history" },
-  { id: 3, label: "Pricing", path: "/pricing" },
+  { id: 1, label: "Home", path: "/dashboard" },
+  { id: 2, label: "History", path: "/dashboard/history" },
+  { id: 3, label: "Billing", path: "/dashboard/billing" },
   { id: 4, label: "Profile", path: "/profile" },
 ];
 

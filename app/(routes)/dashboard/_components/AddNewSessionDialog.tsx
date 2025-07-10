@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dialog,
   DialogClose,
@@ -17,13 +17,37 @@ import axios from "axios";
 import { doctorAgent } from "./DoctorAgentCard";
 import SuggestedDoctorCard from "./SuggestedDoctorCard";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
+import { SessionDetails } from "../medical-agent/[sessionId]/page";
 
 function AddNewSessionDialog() {
   const [note, setNote] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [suggestedDoctors, setSuggestedDoctors] = useState<doctorAgent[]>([]);
   const [selectedDoctor, setSelectedDoctor] = useState<doctorAgent | null>(null);
+  const [historyList, setHistoryList] = useState<SessionDetails[]>([]);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+   const {has} = useAuth();
+    //@ts-ignore
+    const paidUser= has && has({ plan: 'pro' })
+
+     useEffect(() => {
+        GetHistoryList();
+      }, []);
+    
+      const GetHistoryList = async () => {
+        try {
+          const result = await axios.get("/api/session-chat?sessionId=all");
+          console.log("History List: ", result.data);
+          setHistoryList(result.data);
+        } catch (err) {
+          console.error("Failed to fetch history list", err);
+        } finally {
+          setLoading(false);
+        }
+      };
 
   const OnClickNext = async () => {
     try {
@@ -65,7 +89,7 @@ function AddNewSessionDialog() {
     <div>
       <Dialog>
         <DialogTrigger asChild>
-          <Button className="mt-4">+ Start Consultation</Button>
+          <Button className="mt-4" disabled={!paidUser && historyList.length >= 1}>+ Start Consultation</Button>
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>
