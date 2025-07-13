@@ -58,9 +58,9 @@ function ViewReportDialog({ record }: Props) {
                   <div>
                     <span className="font-semibold">Agent:</span> {report.agent}
                   </div>
-                  <div>
+                  {/* <div>
                     <span className="font-semibold">User:</span> {report.user}
-                  </div>
+                  </div> */}
                   <div>
                     <span className="font-semibold">Timestamp:</span>{" "}
                     {new Date(report.timestamp).toLocaleString()}

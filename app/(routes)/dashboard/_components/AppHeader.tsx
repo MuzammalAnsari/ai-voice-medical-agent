@@ -1,6 +1,7 @@
 "use client";
 
 import { UserButton } from "@clerk/nextjs";
+import { Stethoscope } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -14,10 +15,12 @@ const menuOptions = [
 export default function AppHeader() {
   return (
     <header className="flex items-center justify-between py-4 bg-white shadow-sm sticky top-0 z-50 px-10 md:px-20 lg:px-40">
-      {/* Logo */}
-      <Link href="/">
-        <Image src="/logo.svg" alt="Logo" width={160} height={80} priority />
-      </Link>
+      <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-teal-600 rounded-lg flex items-center justify-center">
+                <Stethoscope className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xl font-bold"><Link href="/">MedVoice AI</Link></span>
+            </div>
 
       {/* Navigation */}
       <nav>
